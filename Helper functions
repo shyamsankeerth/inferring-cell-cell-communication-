@@ -1,0 +1,142 @@
+#####################homepage paramteres################################# 
+#######we added the filter bar function########
+control_homepage <- function(realdata, input) {
+  data_filtered <- realdata  # Initialize with original data
+  
+  if (!"all" %in% input$cell_selection) {
+    data_filtered <- data_filtered %>%
+      filter(cell1 %in% input$cell_selection | cell2 %in% input$cell_selection)
+  }
+  
+  if (!"all" %in% input$handle) {
+    data_filtered <- data_filtered %>%
+      filter(handle %in% input$handle)
+  }
+  
+  if (!"all" %in% input$dataset) {
+    data_filtered <- data_filtered %>%
+      filter(dataset %in% input$dataset)
+  }
+  
+  return(data_filtered)
+}
+
+###################genepage parameters############
+control_genepage <- function(realdata, input) {
+  data <- realdata  # Initialize with original data
+  
+  if (input$cells_select != "all") {
+    data <- data %>%
+      filter(cell1 %in% input$cells_select | cell2 %in% input$cells_select)
+  }
+  
+  if (input$handlee != "all") {
+    data <- data %>%
+      filter(handle == input$handlee)
+  }
+  
+  if (input$datasetss != "all") {
+    dataset_name <- input$datasetss
+    data <- data %>%
+      filter(dataset %in% dataset_name)
+  }
+  
+  return(data)
+}
+
+
+###################interactionspage parameters############
+control_interactionspage <- function(realdata, input) {
+  cell_counts <- realdata  # Initialize with original data
+  if (input$cells_selections != "all") {
+    cell <- cell_counts %>%
+      filter(cell1 %in% input$cells_selections | cell2 %in% input$cells_selections)
+  }
+  
+  if (input$handles != "all") {
+    cell_counts <- cell_counts %>%
+      filter(handle == input$handles)
+  }
+  
+  if (input$datasets != "all") {
+    cell_counts <- cell_counts %>%
+      filter(dataset == input$datasets)
+  }
+  return(cell_counts)
+}
+
+
+# Define the parametertuning function 
+#thus function is used for the generation of circoplot in the homepage 
+parametertuning <- function(realdata, input) {
+  data_filtered <- control_homepage(realdata, input)  # Call the control_homepage function
+  
+  homepage_data <- data_filtered %>%
+    calculateadjacencymatrix()
+  
+  return(homepage_data)
+}
+
+# Define the updated calculateCellCounts function is used to generate the barplot in interaction and genepage
+calculateCellCounts <- function(selected_gene, cells_select, handlee, datasetss) {
+  # Define the list of variables
+  desired_cells <- c("Astrocytes", "Microglia", "NeuronE", "NeuronI", "OPC", "Oligos", "Endothelial")
+  
+  cell_counts <- realdata %>%
+    filter(gene_a == selected_gene | gene_b == selected_gene) 
+  
+  if (cells_select != "all") {
+    cell_counts <- cell_counts %>%
+      filter(cell1 %in% cells_select | cell2 %in% cells_select)
+  }
+  
+  if (handlee != "all") {
+    cell_counts <- cell_counts %>%
+      filter(handle == handlee)
+  }
+  
+  if (datasetss != "all") {
+    datasetss_lower <- str_to_lower(datasetss)
+    cell_counts <- cell_counts %>%
+      filter(str_to_lower(dataset) == datasetss_lower)
+  }
+  
+  cell_counts <- cell_counts %>%
+    select(cell1, cell2) %>%
+    mutate(row_index = 1:n()) %>% 
+    gather("foo", "cell", cell1, cell2) %>%
+    select(-foo) %>% 
+    distinct() %>% 
+    count(cell) %>%
+    complete(cell = desired_cells, fill = list(n = 0)) %>%
+    left_join(data.frame(cell = desired_cells), by = "cell") %>%
+    arrange(cell)
+  
+  return(cell_counts)
+}
+
+
+########################ADJACENY MATRIX(EMITTER & RECIEVER)################
+#this is calculated for emitter and reciever matrix for gene and interactions page and for homepage
+calculateEmitterMatrix <- function(data) {
+  emitter_matrix <- data %>%
+    select(emitter, receiver) %>%
+    count(emitter, receiver) %>%
+    spread(receiver, n, fill = 0) %>%
+    tibble::column_to_rownames("emitter") %>%
+    as.matrix()
+  
+  return(emitter_matrix)
+}
+#########################ADJACENY MATRIX############################
+#this is for overall interactions
+calculateadjacencymatrix <- function(data) {
+  adjacency_matrix <- data %>%
+select(cell1, cell2) %>%
+  count(cell1, cell2) %>%
+  spread(cell2, n, fill = 0) %>%
+  tibble::column_to_rownames("cell1") %>%
+  as.matrix()
+  
+  return(adjacency_matrix )
+}

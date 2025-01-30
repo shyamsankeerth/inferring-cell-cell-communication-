@@ -1,0 +1,274 @@
+
+```{r}
+install.packages("qs")
+install.packages("Seurat")
+
+
+```
+
+```{r}
+library(Matrix)
+library(Seurat)
+library(qs)
+library(tidyverse)
+
+```
+
+
+```{r}
+sobj <- qread("67-brain.updated_md.qs", nthreads = 8)
+```
+
+
+
+```{r}
+md <- sobj@meta.data
+counts <- sobj@assays$RNA@counts
+```
+
+
+```{r}
+gex_list <- unique(md$nTREM2) %>% 
+  lapply(function(handle) {
+ 
+    unique(md$cellType) %>% 
+             lapply(function(i) {
+            message(handle)
+               barcodes_use <- md %>% 
+                 filter(nTREM2 == handle) %>% 
+                 filter(cellType == i) %>% 
+                 rownames()
+               counts_subset <- counts[,barcodes_use]
+               gex <- Matrix::rowSums(counts_subset)
+               gex <- data.frame(gene = names(gex), 
+                                 counts = unname(gex),
+                                 celltype = i)
+               return(gex)
+             }) %>% 
+             bind_rows() %>% 
+             arrange(gene)
+  })
+names(gex_list) <- unique(md$nTREM2)
+```
+
+
+```{r}
+# Function to compute ECDF percentiles for a given dataset
+compute_percentiles <- function(dataset) {
+  dataset %>%
+    group_by(celltype) %>%
+    mutate(percentile = ecdf(counts)(counts)) %>%
+    ungroup() %>%
+    arrange(gene)
+}
+
+# Compute percentiles for each dataset in the gex_list
+gex_list_with_percentiles <- lapply(gex_list, compute_percentiles)
+
+# Assign the percentile results to the gex_list
+names(gex_list_with_percentiles) <- names(gex_list)
+```
+
+
+```{r}
+# Compute percentiles for each dataset in the gex_list
+gex_list_with_percentiles <- lapply(gex_list, compute_percentiles)
+
+# Assign the percentile results to the gex_list
+names(gex_list_with_percentiles) <- names(gex_list)
+
+# Calculate the sum of percentiles for each gene and celltype across all handles
+summed_gex <- do.call(rbind, gex_list_with_percentiles) %>%
+  group_by(gene, celltype) %>%
+  summarise(sum_percentile = sum(percentile))
+
+# Add the summed_gex to the gex_list_with_percentiles list under the handle "all"
+gex_list_with_percentiles[["all"]] <- summed_gex
+
+
+```
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Choose a specific handle and gene from the list
+selected_handle <- "OTH"  # Replace with the handle you want to plot
+selected_gene <- "SEMA6D"  # Replace with the gene you want to plot
+
+# Filter the gene expression data for the selected handle and gene
+selected_handle_expr <- gex_list[[selected_handle]]
+selected_gene_expr <- selected_handle_expr %>% 
+  filter(gene %in% selected_gene)
+
+```
+```{r}
+
+ggplot(selected_handle_expr, aes(x = percentile)) +
+    geom_rect(aes(xmin = -Inf, xmax = Inf, ymin =0.3, ymax = 0.7), alpha = 0.2) +
+    geom_vline(data = selected_gene_expr, aes(xintercept = percentile), color = "red", linewidth = 1) +
+    labs(
+      x = "Percentile",
+      y = NULL,  # No y-axis label
+     title = "Gene Expression Percentiles by Cell Type"
+    ) + scale_y_continuous(limits = c(0,1)) +
+  facet_wrap(~ celltype, scales = "free")+
+    theme_minimal() 
+    
+
+
+ 
+
+
+     
+
+
+```
+
+
+
+
+
+```{r}
+saveRDS(gex_list$OTH, file = "OTH_gene_expression.rds")
+saveRDS(gex_list_with_percentiles, file = "gex_list_with_percentiles.rds")
+densitydata <- readRDS("gex_list.rds")
+
+
+```
+
+```{r}
+# Combine the individual gex_list data frames into a single data frame
+combined_gex <- do.call(rbind, lapply(names(gex_list_with_percentiles), function(handle) {
+  df <- gex_list_with_percentiles[[handle]]
+  df$handle <- handle
+  return(df)
+}))
+
+# Add the combined gex to the gex_list
+gex_list_with_percentiles$COMBINED <- combined_gex
+
+```
+
+```{r}
+# Create a new combined_gex data frame with consistent column names
+combined_gex <- data.frame()
+
+# Iterate through each handle in gex_list and combine the data
+for (handle in names(gex_list_with_percentiles)) {
+  df <- gex_list_with_percentiles[[handle]]
+  df$handle <- handle
+  
+  # If combined_gex is empty, directly assign the first handle's data
+  if (nrow(combined_gex) == 0) {
+    combined_gex <- df
+  } else {
+    # Make sure column names match before combining
+    combined_gex <- dplyr::bind_rows(combined_gex, df, .id = "id")
+  }
+}
+
+# Calculate the sum of percentiles for each gene and celltype across all handles
+summed_gex <- combined_gex %>%
+  group_by(gene, celltype) %>%
+  summarise(sum_percentile = sum(percentile))
+
+# Add the summed_gex to the gex_list under the handle "all"
+gex_list_with_percentiles$all <- summed_gex
+
+```
+
+
+```{r}
+md <- sobj@meta.data
+counts <- sobj@assays$RNA@counts
+
+library(dplyr)
+library(Matrix)
+
+gex_list <- unique(md$nTREM2) %>% 
+  lapply(function(handle) {
+    message(handle)
+    unique(md$cellType) %>% 
+      lapply(function(i) {
+        message(i)
+        barcodes_use <- md %>% 
+          filter(nTREM2 == handle) %>% 
+          rownames()
+        counts_subset <- counts[, barcodes_use]
+        gex <- Matrix::rowSums(counts_subset)
+        gex <- data.frame(
+          gene = names(gex), 
+          counts = unname(gex),
+          cellType = i
+        )
+        return(gex)
+      }) %>% 
+      bind_rows() %>% 
+      arrange(gene)
+  })
+
+names(gex_list) <- unique(md$nTREM2)
+
+```
+
+
+
+```{r, fig.height=12 ,fig.width=6}
+library(ggplot2)
+
+
+# Choose a specific handle and gene from the list
+selected_handle <- "COMBINED"  # Replace with the handle you want to plot
+selected_gene <- "SEMA6D"  # Replace with the gene you want to plot
+
+# Filter the gene expression data for the selected handle and gene
+selected_handle_expr <- gex_list[[selected_handle]]
+selected_gene_expr <- selected_handle_expr %>% 
+  filter(gene %in% selected_gene)
+
+# Create a density plot of gene expression
+ggplot(selected_handle_expr, aes(x = counts ,fill=celltype)) +
+  geom_density(alpha = 0.6) +
+  geom_vline(aes(xintercept = counts, color = gene), data = selected_gene_expr, linetype = "dashed") +
+  labs(x = "Gene Expression", y = "Density") +
+  facet_wrap(~ celltype, ncol = 1) +scale_x_continuous(trans = 'log10') + 
+  theme_minimal()
+```
+
+
+```{r}
+ # Choose a specific handle and gene from the list
+selected_handle <- "CO" 
+selected_gene <- "SEMA6D"
+
+
+
+# Retrieve the receptor gene names based on the selected interaction
+selected_interaction <- 	"CPI-CS0123BC66C"
+
+# Extract gene names from the "receptor" column in inter_dic
+receptor_gene_names <- inter_dic %>%
+  filter(id_cp_interaction == selected_interaction) %>%
+  pull(receptor) %>%
+  str_extract("\\{(.*?)\\}") %>%
+  na_if("") %>%
+  ifelse(is.na(.), strsplit(., ", "), .) %>%
+  unlist()
+
+
+
+# Create a density plot of gene expression
+ggplot() +
+  geom_density(data = selected_handle_expr, aes(x = counts, fill = celltype), alpha = 0.6) +
+  geom_vline(data = selected_gene_expr, aes(xintercept = counts), color = "red", linetype = "dashed") +
+  geom_vline(data = tibble(gene = receptor_gene_names), aes(xintercept = counts, color = gene), linetype = "dashed") +
+  labs(x = "Gene Expression", y = "Density") +
+  facet_wrap(~ celltype, ncol = 1, scales = "free") +
+  scale_x_continuous(trans = 'log10', labels = scales::comma) + 
+  scale_color_manual(values = c("red", "blue")) +
+  theme_minimal()
+
+
+```
