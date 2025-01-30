@@ -32,6 +32,6 @@ git init
 git add .
 git commit -m "Initial commit"
 git branch -M main
-git remote add origin https://github.com/shyamsankeerth/new-repo.git
+git remote add origin https://github.com/shyamsankeerth/inferring-cell-cell-communication-CROSSTALK-WEBSERVER.git
 git push -u origin main
 
