@@ -1,4 +1,4 @@
-# inferring-cell-cell-communication-CROSSTALK WEBSERVER
+# CROSSTALK WEBSERVER
 
 **Inferring Cell-Cell Communication in Alzheimer's Brain Cells**
 **Overview**
